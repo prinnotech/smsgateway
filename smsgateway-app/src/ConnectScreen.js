@@ -40,11 +40,14 @@ export default function ConnectScreen({ onConnected }) {
             try { info = SmsGateway.getDeviceInfo(); } catch (e) {}
             let sims = [];
             try {
-                const g = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-                    { title: 'Phone permission', message: 'SMS Gateway reads your SIM info to register this phone.', buttonPositive: 'OK' }
-                );
-                if (g === PermissionsAndroid.RESULTS.GRANTED) sims = SmsGateway.getSimInfo();
+                const perms = [PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE];
+                if (PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS) {
+                    perms.push(PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS);
+                }
+                const res = await PermissionsAndroid.requestMultiple(perms);
+                if (res[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] === PermissionsAndroid.RESULTS.GRANTED) {
+                    sims = SmsGateway.getSimInfo();
+                }
             } catch (e) {}
             await registerDevices(sims, info);
             setConnecting(false);

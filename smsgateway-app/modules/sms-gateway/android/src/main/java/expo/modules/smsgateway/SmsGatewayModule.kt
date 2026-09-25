@@ -45,12 +45,28 @@ class SmsGatewayModule : Module() {
       val subs = subManager.activeSubscriptionInfoList
         ?: return@Function emptyList<Map<String, Any?>>()
 
+      // Best-effort phone number. The legacy SubscriptionInfo.number is usually
+      // blank; on Android 13+ getPhoneNumber(subId) also checks the carrier and
+      // IMS sources (needs READ_PHONE_NUMBERS) and succeeds more often.
+      val canReadNumbers = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.READ_PHONE_NUMBERS
+      ) == PackageManager.PERMISSION_GRANTED
+
       subs.map { info ->
+        var number = info.number ?: ""
+        if (number.isBlank() && canReadNumbers &&
+          Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        ) {
+          try {
+            number = subManager.getPhoneNumber(info.subscriptionId) ?: ""
+          } catch (_: Exception) {
+          }
+        }
         mapOf(
           "slot" to info.simSlotIndex,
           "subscriptionId" to info.subscriptionId,
           "carrier" to (info.carrierName?.toString() ?: ""),
-          "number" to (info.number ?: "")
+          "number" to number
         )
       }
     }

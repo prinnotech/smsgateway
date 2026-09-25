@@ -28,6 +28,10 @@ export default function HomeScreen({ onDisconnect }) {
         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
         PermissionsAndroid.PERMISSIONS.SEND_SMS,
       ];
+      // Best-effort auto phone-number detection (Android 13+).
+      if (PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS) {
+        perms.push(PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS);
+      }
       // Notification permission (Android 13+) so the foreground-service
       // notification can show.
       if (PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS) {
