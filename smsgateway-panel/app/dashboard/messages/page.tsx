@@ -61,6 +61,16 @@ export default function MessagesPage() {
     setTimeout(() => setToast(null), 2200);
   };
 
+  const copyOne = async (text: string, label: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      flash(`Copied ${label}`);
+    } catch {
+      flash("Copy failed");
+    }
+  };
+
   const load = useCallback(
     async (p: number, f: MessageFilters) => {
       if (!user?.id) return;
@@ -285,7 +295,15 @@ export default function MessagesPage() {
                     {m.direction === "in" ? "IN" : "OUT"}
                   </td>
                   <td className="px-4 py-2 text-zinc-800 dark:text-zinc-200">
-                    {m.direction === "in" ? m.from : m.to}
+                    <button
+                      onClick={() =>
+                        copyOne((m.direction === "in" ? m.from : m.to) ?? "", "number")
+                      }
+                      title="Click to copy number"
+                      className="rounded hover:text-indigo-600 hover:underline"
+                    >
+                      {m.direction === "in" ? m.from : m.to}
+                    </button>
                   </td>
                   <td className="px-4 py-2 text-xs text-zinc-500">
                     {phoneLabel(m)}
@@ -294,7 +312,13 @@ export default function MessagesPage() {
                     )}
                   </td>
                   <td className="max-w-xs px-4 py-2 text-zinc-600 dark:text-zinc-400">
-                    <div className="truncate">{m.body}</div>
+                    <button
+                      onClick={() => copyOne(m.body, "message")}
+                      title="Click to copy message"
+                      className="block max-w-full truncate text-left hover:text-indigo-600"
+                    >
+                      {m.body}
+                    </button>
                     {m.error && (
                       <div className="mt-0.5 text-xs font-medium text-red-500">
                         ⚠ {m.error}
@@ -307,6 +331,14 @@ export default function MessagesPage() {
                     >
                       {m.status}
                     </span>
+                    {(m.retries ?? 0) > 0 && (
+                      <span
+                        className="ml-1 text-xs text-zinc-400"
+                        title={`Tried ${(m.retries ?? 0) + 1} times`}
+                      >
+                        ×{(m.retries ?? 0) + 1}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-xs text-zinc-400">
                     {new Date(

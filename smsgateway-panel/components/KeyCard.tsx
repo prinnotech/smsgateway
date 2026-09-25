@@ -113,6 +113,29 @@ export default function KeyCard({
     );
   };
 
+  const onNumChange = async (
+    d: DeviceRecord,
+    field: "balance" | "sms_cost" | "low_balance",
+    value: string
+  ) => {
+    const num = value === "" ? 0 : Number(value);
+    if (Number.isNaN(num) || num === (d[field] ?? 0)) return;
+    await updateDevice(d.id, { [field]: num });
+    setDevices((prev) =>
+      prev.map((x) => (x.id === d.id ? { ...x, [field]: num } : x))
+    );
+  };
+
+  // "Check connection" — re-reads the device to get its latest last_seen.
+  const onCheck = async (d: DeviceRecord) => {
+    const fresh = await listDevices(apiKey.id);
+    setDevices(fresh);
+    const cur = fresh.find((x) => x.id === d.id);
+    const online =
+      cur?.last_seen && Date.now() - new Date(cur.last_seen).getTime() < 20000;
+    alert(online ? "✓ Online — polling now." : "✕ Offline — last seen: " + (cur?.last_seen ? new Date(cur.last_seen).toLocaleString() : "never"));
+  };
+
   const onDeleteDevice = async (id: string) => {
     if (!confirm("Remove this device? Its messages will also be deleted.")) return;
     await deleteDevice(id);
@@ -204,79 +227,147 @@ export default function KeyCard({
             connect.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-zinc-400">
-                  <th className="py-1 pr-3">Name</th>
-                  <th className="py-1 pr-3">Phone</th>
-                  <th className="py-1 pr-3">Android</th>
-                  <th className="py-1 pr-3">Carrier</th>
-                  <th className="py-1 pr-3">Number</th>
-                  <th className="py-1 pr-3">Rate/min</th>
-                  <th className="py-1"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {devices.map((d) => (
-                  <tr
-                    key={d.id}
-                    className="border-t border-zinc-100 dark:border-zinc-800"
-                  >
-                    <td className="py-2 pr-3 text-zinc-800 dark:text-zinc-200">
+          <div className="space-y-3">
+            {devices.map((d) => {
+              const online =
+                d.last_seen &&
+                Date.now() - new Date(d.last_seen).getTime() < 20000;
+              const balance = d.balance ?? 0;
+              const low = d.low_balance ?? 0;
+              const isLow = low > 0 && balance <= low;
+              const numInput =
+                "w-full rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950";
+              return (
+                <div
+                  key={d.id}
+                  className={`rounded-lg border p-3 ${
+                    isLow
+                      ? "border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
+                      : "border-zinc-200 dark:border-zinc-800"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        title={online ? "Online" : "Offline"}
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          online ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                        }`}
+                      />
                       <input
                         type="text"
                         defaultValue={d.name ?? ""}
                         placeholder="Name"
                         onBlur={(e) => onFieldChange(d, "name", e.target.value)}
-                        className="w-28 rounded border border-transparent bg-transparent px-1 py-0.5 hover:border-zinc-300 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:hover:border-zinc-700 dark:focus:bg-zinc-950"
+                        className="w-36 rounded border border-transparent bg-transparent px-1 py-0.5 font-medium text-zinc-800 hover:border-zinc-300 focus:border-indigo-500 focus:bg-white focus:outline-none dark:text-zinc-200 dark:hover:border-zinc-700 dark:focus:bg-zinc-950"
                       />
-                      {d.sim_slot != null && (
-                        <span className="ml-1 text-xs text-zinc-400">
-                          slot {d.sim_slot}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-400">
-                      {[d.manufacturer, d.model].filter(Boolean).join(" ") || "—"}
-                    </td>
-                    <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-400">
-                      {d.android || "—"}
-                    </td>
-                    <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-400">
-                      {d.carrier || "—"}
-                    </td>
-                    <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-400">
-                      <input
-                        type="text"
-                        defaultValue={d.number ?? ""}
-                        placeholder="Number"
-                        onBlur={(e) => onFieldChange(d, "number", e.target.value)}
-                        className="w-28 rounded border border-transparent bg-transparent px-1 py-0.5 hover:border-zinc-300 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:hover:border-zinc-700 dark:focus:bg-zinc-950"
-                      />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <input
-                        type="number"
-                        min={0}
-                        defaultValue={d.rate_limit_per_min ?? ""}
-                        onBlur={(e) => onRateChange(d, e.target.value)}
-                        placeholder="∞"
-                        className="w-16 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                      />
-                    </td>
-                    <td className="py-2 text-right">
+                      <span className="truncate text-xs text-zinc-400">
+                        {[d.manufacturer, d.model].filter(Boolean).join(" ")}
+                        {d.sim_slot != null && ` · slot ${d.sim_slot}`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onCheck(d)}
+                        className="rounded border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      >
+                        Check connection
+                      </button>
                       <button
                         onClick={() => onDeleteDevice(d.id)}
                         className="text-xs text-red-600 hover:underline"
                       >
                         remove
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <label className="text-xs text-zinc-500">
+                      Carrier
+                      <div className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">
+                        {d.carrier || "—"}
+                      </div>
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Number
+                      <input
+                        type="text"
+                        defaultValue={d.number ?? ""}
+                        placeholder="—"
+                        onBlur={(e) => onFieldChange(d, "number", e.target.value)}
+                        className={numInput + " mt-0.5"}
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Rate/min
+                      <input
+                        type="number"
+                        min={0}
+                        defaultValue={d.rate_limit_per_min ?? ""}
+                        onBlur={(e) => onRateChange(d, e.target.value)}
+                        placeholder="∞"
+                        className={numInput + " mt-0.5"}
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Android
+                      <div className="mt-0.5 truncate text-sm text-zinc-700 dark:text-zinc-300">
+                        {d.android || "—"}
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-3 sm:grid-cols-4 dark:border-zinc-800">
+                    <label className="text-xs text-zinc-500">
+                      Balance
+                      <input
+                        type="number"
+                        step="0.01"
+                        defaultValue={d.balance ?? ""}
+                        placeholder="0.00"
+                        onBlur={(e) => onNumChange(d, "balance", e.target.value)}
+                        className={numInput + " mt-0.5"}
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Cost / SMS
+                      <input
+                        type="number"
+                        step="0.001"
+                        defaultValue={d.sms_cost ?? ""}
+                        placeholder="0.00"
+                        onBlur={(e) => onNumChange(d, "sms_cost", e.target.value)}
+                        className={numInput + " mt-0.5"}
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Warn at ≤
+                      <input
+                        type="number"
+                        step="0.01"
+                        defaultValue={d.low_balance ?? ""}
+                        placeholder="off"
+                        onBlur={(e) => onNumChange(d, "low_balance", e.target.value)}
+                        className={numInput + " mt-0.5"}
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Spent
+                      <div className="mt-0.5 py-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        {(d.spent ?? 0).toFixed(2)}
+                      </div>
+                    </label>
+                  </div>
+
+                  {isLow && (
+                    <div className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+                      ⚠ Low balance ({balance.toFixed(2)}) — at or below your warning threshold.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

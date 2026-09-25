@@ -24,6 +24,10 @@ export interface DeviceRecord extends RecordModel {
   manufacturer?: string;
   android?: string;
   rate_limit_per_min?: number;
+  balance?: number;
+  sms_cost?: number;
+  low_balance?: number;
+  spent?: number;
   last_seen?: string;
 }
 
@@ -59,4 +63,5 @@ export interface MessageRecord extends RecordModel {
   error?: string;
   send_at?: string;
   campaign?: string;
+  retries?: number;
 }

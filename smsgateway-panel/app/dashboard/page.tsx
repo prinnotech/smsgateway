@@ -65,6 +65,8 @@ export default function OverviewPage() {
   const online = devices.filter(
     (d) => d.last_seen && Date.now() - new Date(d.last_seen).getTime() < ONLINE_MS
   ).length;
+  const totalSpent = devices.reduce((a, d) => a + (d.spent ?? 0), 0);
+  const totalBalance = devices.reduce((a, d) => a + (d.balance ?? 0), 0);
 
   const cards = [
     { label: "Sent", value: stats.sent, tone: "text-emerald-600" },
@@ -72,6 +74,7 @@ export default function OverviewPage() {
     { label: "Pending", value: stats.pending, tone: "text-amber-600" },
     { label: "Failed", value: stats.failed, tone: "text-red-600" },
     { label: "Received", value: stats.received, tone: "text-indigo-600" },
+    { label: "Spent", value: totalSpent.toFixed(2), tone: "text-zinc-800 dark:text-zinc-100" },
   ];
 
   return (
@@ -95,7 +98,7 @@ export default function OverviewPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {cards.map((c) => (
           <div
             key={c.label}
@@ -142,8 +145,19 @@ export default function OverviewPage() {
                         }`}
                       />
                       {d.name || d.carrier || `SIM ${d.sim_slot ?? "?"}`}
+                      {(d.low_balance ?? 0) > 0 &&
+                        (d.balance ?? 0) <= (d.low_balance ?? 0) && (
+                          <span className="text-amber-600" title="Low balance">
+                            ⚠
+                          </span>
+                        )}
                     </span>
-                    <span className="text-xs text-zinc-400">
+                    <span className="flex items-center gap-3 text-xs text-zinc-400">
+                      {(d.balance ?? 0) > 0 || (d.spent ?? 0) > 0 ? (
+                        <span className="text-zinc-500">
+                          bal {(d.balance ?? 0).toFixed(2)}
+                        </span>
+                      ) : null}
                       {timeAgo(d.last_seen)}
                     </span>
                   </li>

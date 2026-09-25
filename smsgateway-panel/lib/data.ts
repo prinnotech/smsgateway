@@ -151,19 +151,18 @@ export function createMessage(m: NewMessage) {
   });
 }
 
-// Re-queue an existing message as a fresh pending send. Optionally send it from
-// a different device (phone/SIM) instead of the original one.
+// Re-queue an existing message on the SAME record (increments its retry count)
+// rather than creating a duplicate. Optionally send from a different device.
 export function resendMessage(
   m: MessageRecord,
   target?: { device: string; sim?: number }
 ) {
-  return pb.collection("messages").create<MessageRecord>({
+  return pb.collection("messages").update<MessageRecord>(m.id, {
     device: target?.device ?? m.device,
-    direction: "out",
-    to: m.to,
-    body: m.body,
     sim: target ? target.sim : m.sim,
     status: "pending",
+    error: "",
+    retries: (m.retries ?? 0) + 1,
     send_at: "",
   });
 }

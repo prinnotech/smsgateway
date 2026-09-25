@@ -134,6 +134,13 @@ export default function CampaignsPage() {
   const rateNum = Number(rate) || 0;
   const noDevices = devices.length === 0;
 
+  const activeTargets = roundRobin
+    ? devices.filter((d) => selected.includes(d.id))
+    : devices.filter((d) => d.id === deviceId);
+  const lowTargets = activeTargets.filter(
+    (d) => (d.low_balance ?? 0) > 0 && (d.balance ?? 0) <= (d.low_balance ?? 0)
+  );
+
   return (
     <div className="max-w-3xl">
       <div className="mb-6">
@@ -261,6 +268,16 @@ export default function CampaignsPage() {
               className={fieldClass()}
             />
           </div>
+
+          {lowTargets.length > 0 && (
+            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+              ⚠ Low balance:{" "}
+              {lowTargets
+                .map((d) => `${d.name || d.carrier || "SIM"} (${(d.balance ?? 0).toFixed(2)})`)
+                .join(", ")}
+              . You can still run the campaign.
+            </div>
+          )}
 
           {result && (
             <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
