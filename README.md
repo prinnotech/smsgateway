@@ -8,6 +8,18 @@ forwarded to the panel too.
 No third-party SMS provider, no Firebase/push, no Play Store — you host the
 backend yourself and install the app directly.
 
+<p>
+  <a href="https://github.com/prinnotech/smsgateway/releases/latest/download/sms-gateway.apk"><img alt="Download the Android APK" src="https://img.shields.io/badge/Download-Android%20APK-3ddc84?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://github.com/prinnotech/smsgateway/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/prinnotech/smsgateway?style=for-the-badge&label=latest"></a>
+</p>
+
+- **Download the app:** the button above always serves the **latest APK**
+  (`releases/latest/download/sms-gateway.apk`). Install it on each phone
+  (enable "Install unknown apps"). See every version on the
+  [Releases page](https://github.com/prinnotech/smsgateway/releases).
+- **Host the backend:** one-click [Deploy on Railway](#deploy-on-railway), or
+  self-host with Docker (see [DEPLOY.md](DEPLOY.md)).
+
 ## How it works
 
 ```
@@ -64,16 +76,33 @@ Or run them without Docker: start `pocketbase serve` in `pocketbase/`, then
 > The QR's "Panel URL" must be reachable from the phone — your public panel URL
 > in production, or your PC's LAN IP (not `localhost`) for local testing.
 
-## Deploying
+## Deploy on Railway
 
-**One-click (recommended):** the root `Dockerfile` bundles PocketBase + the panel
-into a single container (the panel proxies PocketBase at `/pb`). On Railway:
-deploy the repo, add a volume at `/pb/pb_data`, set `POCKETBASE_ADMIN_EMAIL` +
-`POCKETBASE_ADMIN_PASSWORD`, and deploy — the superuser and tables are created
-automatically. One service, one URL.
+<!-- RAILWAY_BUTTON -->
+One click, one service, one URL. The template runs the all-in-one image
+(PocketBase + panel), adds a persistent volume for your data, and asks only for
+an admin email + password. The superuser and database tables are created
+automatically on first boot.
 
-See [`DEPLOY.md`](DEPLOY.md) for that plus the split two-service setup
-(`docker-compose.yml`) and the full environment-variable reference.
+> After deploying: open the generated URL, register, create an API key,
+> **Generate QR**, and scan it in the app. The QR's "Panel URL" is your Railway
+> URL — reachable from the phone anywhere.
+
+## Other ways to deploy
+
+The root `Dockerfile` bundles PocketBase + the panel into a single container
+(the panel proxies PocketBase at `/pb`). Run it anywhere:
+
+```bash
+docker run -d -p 3000:3000 \
+  -e POCKETBASE_ADMIN_EMAIL=admin@example.com \
+  -e POCKETBASE_ADMIN_PASSWORD='a-strong-password' \
+  -v sms_pb_data:/pb/pb_data \
+  ghcr.io/prinnotech/smsgateway:latest
+```
+
+See [`DEPLOY.md`](DEPLOY.md) for Railway-by-hand, the split two-service setup
+(`docker-compose.yml`), and the full environment-variable reference.
 
 ## The phone API (bearer-token)
 
