@@ -7,6 +7,8 @@ import {
   countMessages,
   listUserDevices,
   listMessages,
+  spentInRange,
+  type DateRange,
 } from "@/lib/data";
 import type { DeviceRecord, MessageRecord } from "@/types/pb";
 
@@ -23,6 +25,58 @@ function timeAgo(iso?: string) {
 
 const ONLINE_MS = 2 * 60 * 1000; // seen within 2 min = online
 
+type Preset = "today" | "yesterday" | "7d" | "30d" | "all" | "custom";
+
+const PRESETS: { value: Preset; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "all", label: "All time" },
+  { value: "custom", label: "Custom" },
+];
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(d: Date, n: number) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+
+// "YYYY-MM-DD" from an <input type="date"> as local midnight.
+function parseDay(v: string) {
+  const [y, m, d] = v.split("-").map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : undefined;
+}
+
+function toDayInput(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Day boundaries are in the browser's local time zone.
+function presetRange(preset: Preset, from: string, to: string): DateRange | undefined {
+  const today = startOfDay(new Date());
+  switch (preset) {
+    case "today":
+      return { from: today, to: addDays(today, 1) };
+    case "yesterday":
+      return { from: addDays(today, -1), to: today };
+    case "7d":
+      return { from: addDays(today, -6), to: addDays(today, 1) };
+    case "30d":
+      return { from: addDays(today, -29), to: addDays(today, 1) };
+    case "custom": {
+      const f = parseDay(from);
+      const t = parseDay(to);
+      return { from: f, to: t ? addDays(t, 1) : undefined };
+    }
+    default:
+      return undefined;
+  }
+}
+
 export default function OverviewPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -36,36 +90,51 @@ export default function OverviewPage() {
   });
   const [devices, setDevices] = useState<DeviceRecord[]>([]);
   const [recent, setRecent] = useState<MessageRecord[]>([]);
+  const [rangeSpent, setRangeSpent] = useState<number | null>(null);
+  const [preset, setPreset] = useState<Preset>("all");
+  const [customFrom, setCustomFrom] = useState(() => toDayInput(new Date()));
+  const [customTo, setCustomTo] = useState(() => toDayInput(new Date()));
 
   useEffect(() => {
     if (!user?.id) return;
+    const range = presetRange(preset, customFrom, customTo);
+    let cancelled = false;
     (async () => {
       setLoading(true);
       try {
         const [sent, failed, received, pending, sending, scheduled, devs, recentMsgs] =
           await Promise.all([
-            countMessages(user.id, "sent"),
-            countMessages(user.id, "failed"),
-            countMessages(user.id, "received"),
-            countMessages(user.id, "pending"),
-            countMessages(user.id, "sending"),
-            countMessages(user.id, "scheduled"),
+            countMessages(user.id, "sent", undefined, range),
+            countMessages(user.id, "failed", undefined, range),
+            countMessages(user.id, "received", undefined, range),
+            countMessages(user.id, "pending", undefined, range),
+            countMessages(user.id, "sending", undefined, range),
+            countMessages(user.id, "scheduled", undefined, range),
             listUserDevices(user.id),
-            listMessages(user.id, {}, 1, 6),
+            listMessages(user.id, { range }, 1, 6),
           ]);
+        // "All time" uses each device's running total; a window is computed
+        // from the messages charged inside it.
+        const spent = range ? await spentInRange(devs, range) : null;
+        if (cancelled) return;
         setStats({ sent, failed, received, pending, sending, scheduled });
         setDevices(devs);
         setRecent(recentMsgs.items);
+        setRangeSpent(spent);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [user]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, preset, customFrom, customTo]);
 
   const online = devices.filter(
     (d) => d.last_seen && Date.now() - new Date(d.last_seen).getTime() < ONLINE_MS
   ).length;
-  const totalSpent = devices.reduce((a, d) => a + (d.spent ?? 0), 0);
+  const totalSpent =
+    rangeSpent ?? devices.reduce((a, d) => a + (d.spent ?? 0), 0);
   const totalBalance = devices.reduce((a, d) => a + (d.balance ?? 0), 0);
 
   const cards = [
@@ -96,6 +165,46 @@ export default function OverviewPage() {
         >
           Send a message
         </Link>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            onClick={() => setPreset(p.value)}
+            className={`rounded-lg border px-3 py-1.5 text-sm ${
+              preset === p.value
+                ? "border-indigo-600 bg-indigo-600 text-white"
+                : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        {preset === "custom" && (
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <label className="sr-only" htmlFor="range-from">From</label>
+            <input
+              id="range-from"
+              type="date"
+              value={customFrom}
+              max={customTo || undefined}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            />
+            <span>to</span>
+            <label className="sr-only" htmlFor="range-to">To</label>
+            <input
+              id="range-to"
+              type="date"
+              value={customTo}
+              min={customFrom || undefined}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            />
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">

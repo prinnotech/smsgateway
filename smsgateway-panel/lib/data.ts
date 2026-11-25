@@ -86,6 +86,7 @@ export interface MessageFilters {
   direction?: "out" | "in";
   status?: MessageStatus;
   search?: string;
+  range?: DateRange;
 }
 
 export function listMessages(
@@ -94,7 +95,7 @@ export function listMessages(
   page = 1,
   perPage = 50
 ) {
-  const parts = [`device.api_key.user = "${userId}"`];
+  const parts = [`device.api_key.user = "${userId}"`, ...rangeFilter(filters.range)];
   if (filters.direction) parts.push(`direction = "${filters.direction}"`);
   if (filters.status) parts.push(`status = "${filters.status}"`);
   if (filters.search) {
@@ -188,12 +189,27 @@ export async function createMessages(list: NewMessage[]) {
 
 // ---- Stats ----------------------------------------------------------------
 
+// Optional time window on a message's `created` time. `from` is inclusive,
+// `to` exclusive; either may be omitted.
+export interface DateRange {
+  from?: Date;
+  to?: Date;
+}
+
+function rangeFilter(range?: DateRange) {
+  const parts: string[] = [];
+  if (range?.from) parts.push(`created >= "${pbDate(range.from)}"`);
+  if (range?.to) parts.push(`created < "${pbDate(range.to)}"`);
+  return parts;
+}
+
 export async function countMessages(
   userId: string,
   status?: MessageStatus,
-  direction?: "out" | "in"
+  direction?: "out" | "in",
+  range?: DateRange
 ) {
-  const parts = [`device.api_key.user = "${userId}"`];
+  const parts = [`device.api_key.user = "${userId}"`, ...rangeFilter(range)];
   if (status) parts.push(`status = "${status}"`);
   if (direction) parts.push(`direction = "${direction}"`);
   const res = await pb.collection("messages").getList<MessageRecord>(1, 1, {
@@ -201,6 +217,24 @@ export async function countMessages(
     fields: "id",
   });
   return res.totalItems;
+}
+
+// Money spent in a time window: charged messages per device × that device's
+// current SMS cost. (Uses today's cost, so it's approximate if the cost was
+// changed during the window.)
+export async function spentInRange(devices: DeviceRecord[], range: DateRange) {
+  const priced = devices.filter((d) => (d.sms_cost ?? 0) > 0);
+  const totals = await Promise.all(
+    priced.map(async (d) => {
+      const parts = [`device = "${d.id}"`, "charged = true", ...rangeFilter(range)];
+      const res = await pb.collection("messages").getList<MessageRecord>(1, 1, {
+        filter: parts.join(" && "),
+        fields: "id",
+      });
+      return res.totalItems * (d.sms_cost ?? 0);
+    })
+  );
+  return totals.reduce((a, b) => a + b, 0);
 }
 
 // ---- Campaigns ------------------------------------------------------------
